@@ -113,7 +113,7 @@ app.post("/reset-password/:token", async (req, res) => {
   try {
     const user = await User.findOne({
       resetToken: token,
-      resetTokenExpires: { $gt: Date.now() }, // Ensure token is not expired
+      resetTokenExpires: { $gt: Date.now() },
     });
 
     if (!user)
