@@ -199,6 +199,20 @@ app.post("/auth/google", async (req, res) => {
   }
 });
 
+// Fetch Users
+app.get("/users", async (req, res) => {
+  try {
+    const users = await User.find(
+      {},
+      { password: 0, resetToken: 0, resetTokenExpires: 0 }
+    ); // Exclude sensitive data
+    res.json({ success: true, users });
+  } catch (error) {
+    console.error("Error fetching users:", error);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
 // Start Server
 app.listen(port, () => {
   console.log(`Server is running on http://localhost:${port}`);
