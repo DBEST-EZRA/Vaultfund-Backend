@@ -6,6 +6,7 @@ const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 const crypto = require("crypto");
 require("dotenv").config();
+const { OAuth2Client } = require("google-auth-library");
 
 const app = express();
 const port = 3000;
@@ -153,6 +154,49 @@ app.post("/mail", (req, res) => {
     console.log("Email sent: " + info.response);
     return res.status(200).json({ message: "Welcome email sent successfully" });
   });
+});
+
+const googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
+
+// Google Sign-In
+app.post("/auth/google", async (req, res) => {
+  const { token } = req.body;
+
+  try {
+    const ticket = await googleClient.verifyIdToken({
+      idToken: token,
+      audience: process.env.GOOGLE_CLIENT_ID,
+    });
+
+    const { email, name, picture } = ticket.getPayload();
+
+    // Check if user exists in database
+    let user = await User.findOne({ email });
+
+    if (!user) {
+      // Create a new user if they don't exist
+      user = new User({ email, password: null });
+      await user.save();
+    }
+
+    // Generate JWT for session
+    const jwtToken = jwt.sign(
+      { userId: user._id, email },
+      process.env.JWT_SECRET,
+      {
+        expiresIn: "1h",
+      }
+    );
+
+    res.json({
+      message: "Google login successful",
+      token: jwtToken,
+      user: { email, name, picture },
+    });
+  } catch (error) {
+    console.error("Google authentication error:", error);
+    res.status(401).json({ error: "Invalid Google token" });
+  }
 });
 
 // Start Server
