@@ -5,6 +5,9 @@ const mongoose = require("mongoose");
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 const crypto = require("crypto");
+const axios = require("axios");
+const base64 = require("base-64");
+const moment = require("moment");
 require("dotenv").config();
 const { OAuth2Client } = require("google-auth-library");
 
@@ -39,6 +42,59 @@ const transporter = nodemailer.createTransport({
     pass: process.env.EMAIL_PASS,
   },
 });
+
+const generateToken = async () => {
+  const auth = base64.encode(
+    `${process.env.CONSUMER_KEY}:${process.env.CONSUMER_SECRET}`
+  );
+  try {
+    const response = await axios.get(
+      "https://sandbox.safaricom.co.ke/oauth/v1/generate?grant_type=client_credentials",
+      {
+        headers: { Authorization: `Basic ${auth}` },
+      }
+    );
+    return response.data.access_token;
+  } catch (error) {
+    console.error("Error generating token:", error);
+    throw error;
+  }
+};
+
+const stkPush = async (req, res) => {
+  const { phone, amount } = req.body;
+  const timestamp = moment().format("YYYYMMDDHHmmss");
+  const password = base64.encode(
+    `${process.env.BUSINESS_SHORT_CODE}${process.env.PASSKEY}${timestamp}`
+  );
+
+  try {
+    const token = await generateToken();
+    const response = await axios.post(
+      "https://sandbox.safaricom.co.ke/mpesa/stkpush/v1/processrequest",
+      {
+        BusinessShortCode: process.env.BUSINESS_SHORT_CODE,
+        Password: password,
+        Timestamp: timestamp,
+        TransactionType: "CustomerPayBillOnline",
+        Amount: amount,
+        PartyA: phone,
+        PartyB: process.env.BUSINESS_SHORT_CODE,
+        PhoneNumber: phone,
+        CallBackURL: process.env.CALLBACK_URL,
+        AccountReference: "Beta Designs",
+        TransactionDesc: "Development Charges",
+      },
+      { headers: { Authorization: `Bearer ${token}` } }
+    );
+    res.json(response.data);
+  } catch (error) {
+    console.error("STK Push error:", error);
+    res.status(500).json({ error: "STK Push request failed" });
+  }
+};
+
+app.post("/stkpush", stkPush);
 
 // Signup
 app.post("/signup", async (req, res) => {
