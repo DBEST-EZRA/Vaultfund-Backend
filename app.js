@@ -36,6 +36,7 @@ const kittySchema = new mongoose.Schema(
     beneficiaryNumber: { type: Number, required: true },
     maturityDate: { type: Date, required: true },
     kittyAddress: { type: String, required: true, unique: true },
+    kittyAmount: { type: Number, default: 0 },
   },
   { timestamps: true }
 );
@@ -79,6 +80,57 @@ app.post("/createkitty", async (req, res) => {
   } catch (error) {
     console.error("Error creating kitty:", error);
     res.status(500).json({ message: "Internal server error." });
+  }
+});
+
+// Fetch all Kitties
+app.get("/getkitties", async (req, res) => {
+  try {
+    const kitties = await Kitty.find();
+    res.status(200).json(kitties);
+  } catch (error) {
+    console.error("Error fetching kitties:", error);
+    res.status(500).json({ message: "Internal server error." });
+  }
+});
+
+// Contribution Schema
+const contributionSchema = new mongoose.Schema({
+  kittyAddress: String,
+  name: String,
+  email: String,
+  amount: Number,
+  transactionRef: String,
+  status: { type: String, default: "pending" },
+  createdAt: { type: Date, default: Date.now },
+});
+
+const Contribution = mongoose.model("Contribution", contributionSchema);
+
+// Contribute Endpoint
+app.post("/contribute", async (req, res) => {
+  try {
+    const { kittyAddress, name, email, amount, transactionRef } = req.body;
+
+    // Validate required fields
+    if (!kittyAddress || !name || !email || !amount || !transactionRef) {
+      return res.status(400).json({ error: "All fields are required." });
+    }
+
+    const contribution = new Contribution({
+      kittyAddress,
+      name,
+      email,
+      amount,
+      transactionRef,
+      status: "pending", // Automatically set to pending
+    });
+
+    await contribution.save();
+    res.status(201).json({ message: "Contribution recorded successfully!" });
+  } catch (error) {
+    console.error("Error processing contribution:", error);
+    res.status(500).json({ error: "Failed to record contribution" });
   }
 });
 
