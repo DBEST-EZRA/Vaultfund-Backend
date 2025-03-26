@@ -94,6 +94,42 @@ app.get("/getkitties", async (req, res) => {
   }
 });
 
+// Find kitty by Email
+app.get("/getkitties/by-email", async (req, res) => {
+  try {
+    const { kittyEmail } = req.query;
+    if (!kittyEmail) {
+      return res.status(400).json({ error: "Kitty email is required." });
+    }
+
+    const kitties = await Kitty.find({ kittyEmail }); // FIXED FIELD NAME
+
+    if (kitties.length === 0) {
+      return res
+        .status(404)
+        .json({ message: "No kitties found for this email." });
+    }
+
+    res.status(200).json(kitties);
+  } catch (error) {
+    console.error("Error fetching kitties by email:", error);
+    res.status(500).json({ message: "Internal server error." });
+  }
+});
+
+//checking kitty address
+app.get("/checkkitty/:kittyAddress", async (req, res) => {
+  try {
+    const kitty = await Kitty.findOne({
+      kittyAddress: req.params.kittyAddress,
+    });
+    res.json({ exists: !!kitty });
+  } catch (error) {
+    console.error("Error checking kitty address:", error);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
 // Contribution Schema
 const contributionSchema = new mongoose.Schema({
   kittyAddress: String,
@@ -131,6 +167,59 @@ app.post("/contribute", async (req, res) => {
   } catch (error) {
     console.error("Error processing contribution:", error);
     res.status(500).json({ error: "Failed to record contribution" });
+  }
+});
+
+//for individual contributions
+app.get("/contribute", async (req, res) => {
+  try {
+    const { email } = req.query;
+    if (!email) return res.status(400).json({ error: "Email is required." });
+
+    const contributions = await Contribution.find({ email }).sort({
+      createdAt: -1,
+    });
+
+    res.status(200).json(contributions);
+  } catch (error) {
+    console.error("Error fetching contributions:", error);
+    res.status(500).json({ error: "Failed to fetch contributions." });
+  }
+});
+
+//for all contributions
+app.get("/contributions", async (req, res) => {
+  try {
+    const contributions = await Contribution.find().sort({ createdAt: -1 });
+    res.status(200).json(contributions);
+  } catch (error) {
+    console.error("Error fetching all contributions:", error);
+    res.status(500).json({ error: "Failed to fetch contributions." });
+  }
+});
+
+// Fetch all contributions for a specific kitty address
+app.get("/contributions/by-kitty", async (req, res) => {
+  try {
+    const { kittyAddress } = req.query;
+    if (!kittyAddress) {
+      return res.status(400).json({ error: "Kitty address is required." });
+    }
+
+    const contributions = await Contribution.find({ kittyAddress }).sort({
+      createdAt: -1,
+    });
+
+    if (contributions.length === 0) {
+      return res
+        .status(404)
+        .json({ message: "No contributions found for this kitty address." });
+    }
+
+    res.status(200).json(contributions);
+  } catch (error) {
+    console.error("Error fetching contributions by kitty address:", error);
+    res.status(500).json({ error: "Failed to fetch contributions." });
   }
 });
 
