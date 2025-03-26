@@ -153,6 +153,7 @@ app.post("/contribute", async (req, res) => {
       return res.status(400).json({ error: "All fields are required." });
     }
 
+    // Save contribution in the database
     const contribution = new Contribution({
       kittyAddress,
       name,
@@ -163,6 +164,40 @@ app.post("/contribute", async (req, res) => {
     });
 
     await contribution.save();
+
+    // Send confirmation email
+    const mailOptions = {
+      from: process.env.EMAIL_USER,
+      to: email,
+      subject: "Contribution Confirmation - Smart Purse",
+      text: `Thank you for using Smart Purse, ${name}!
+
+We appreciate your contribution to the kitty with address: ${kittyAddress}.
+
+Here are the details of your transaction:
+- Amount Contributed: $${amount}
+- Transaction Reference: ${transactionRef}
+- Contribution Status: Pending
+
+Your contribution is currently being processed, and you will receive an update once it's confirmed.
+
+If you have any questions, feel free to contact our support team.
+
+Best regards,  
+The Smart Purse Team`,
+    };
+
+    transporter.sendMail(mailOptions, (error, info) => {
+      if (error) {
+        console.error("Email sending error:", error);
+        return res.status(500).json({
+          message:
+            "Contribution recorded, but failed to send confirmation email.",
+        });
+      }
+      console.log("Email sent: " + info.response);
+    });
+
     res.status(201).json({ message: "Contribution recorded successfully!" });
   } catch (error) {
     console.error("Error processing contribution:", error);
