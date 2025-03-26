@@ -2,8 +2,7 @@ const express = require("express");
 const nodemailer = require("nodemailer");
 const bodyParser = require("body-parser");
 const mongoose = require("mongoose");
-const bcrypt = require("bcryptjs");
-const jwt = require("jsonwebtoken");
+const cron = require("node-cron");
 const crypto = require("crypto");
 const axios = require("axios");
 const base64 = require("base-64");
@@ -74,9 +73,46 @@ app.post("/createkitty", async (req, res) => {
     });
 
     await newKitty.save();
-    res
-      .status(201)
-      .json({ message: "Kitty created successfully!", data: newKitty });
+
+    // Send confirmation email
+    const mailOptions = {
+      from: process.env.EMAIL_USER,
+      to: kittyEmail,
+      subject: "Your Kitty Has Been Created - Smart Purse",
+      text: `Thank you for using Smart Purse, ${kittyName}!
+
+We are excited to inform you that your kitty has been successfully created.
+
+Here are the details:
+- **Kitty Name:** ${kittyName}
+- **Kitty Type:** ${kittyType}
+- **Description:** ${kittyDescription}
+- **Beneficiary Number:** ${beneficiaryNumber}
+- **Maturity Date:** ${maturityDate}
+- **Kitty Address:** ${kittyAddress}
+
+You can now share your kitty address with contributors to start receiving contributions.
+
+If you have any questions, feel free to contact our support team.
+
+Best regards,  
+The Smart Purse Team`,
+    };
+
+    transporter.sendMail(mailOptions, (error, info) => {
+      if (error) {
+        console.error("Email sending error:", error);
+        return res.status(500).json({
+          message: "Kitty created, but failed to send confirmation email.",
+        });
+      }
+      console.log("Email sent: " + info.response);
+    });
+
+    res.status(201).json({
+      message: "Kitty created successfully!",
+      data: newKitty,
+    });
   } catch (error) {
     console.error("Error creating kitty:", error);
     res.status(500).json({ message: "Internal server error." });
@@ -175,7 +211,7 @@ app.post("/contribute", async (req, res) => {
 We appreciate your contribution to the kitty with address: ${kittyAddress}.
 
 Here are the details of your transaction:
-- Amount Contributed: $${amount}
+- Amount Contributed: ${amount}
 - Transaction Reference: ${transactionRef}
 - Contribution Status: Pending
 
@@ -290,6 +326,90 @@ app.post("/mail", (req, res) => {
     console.log("Email sent: " + info.response);
     return res.status(200).json({ message: "Welcome email sent successfully" });
   });
+});
+
+// Schedule Task to Run Every 24 Hours
+cron.schedule("*/10 * * * *", async () => {
+  console.log("Running scheduled contribution summary email task...");
+
+  try {
+    const today = moment().startOf("day");
+
+    // Fetch kitties where maturityDate has NOT been reached
+    const activeKitties = await Kitty.find({ maturityDate: { $gte: today } });
+
+    for (const kitty of activeKitties) {
+      // Get all contributions for this kitty
+      const contributions = await Contribution.find({
+        kittyAddress: kitty.kittyAddress,
+      });
+
+      if (contributions.length === 0) continue; // Skip if no contributions
+
+      // Get unique contributor emails
+      const contributorEmails = [...new Set(contributions.map((c) => c.email))];
+
+      // Create Email Table for Contributions
+      let tableRows = contributions
+        .map(
+          (c) => `
+          <tr>
+            <td>${c.name}</td>
+            <td>${c.email}</td>
+            <td>${c.amount}</td>
+            <td>${c.transactionRef}</td>
+            <td>${c.status}</td>
+          </tr>
+        `
+        )
+        .join("");
+
+      const emailBody = `
+        <p>Thank you for using Smart Purse, ${kitty.kittyName} contributors!</p>
+        <p>Here is the latest summary of contributions for the kitty:</p>
+        <table border="1" cellpadding="5" cellspacing="0" style="border-collapse: collapse;">
+          <thead>
+            <tr>
+              <th>Name</th>
+              <th>Email</th>
+              <th>Amount</th>
+              <th>Transaction Ref</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${tableRows}
+          </tbody>
+        </table>
+        <p>Total Contributions: <strong>${contributions.reduce(
+          (sum, c) => sum + c.amount,
+          0
+        )}</strong></p>
+        <p>Keep contributing and managing your savings with Smart Purse!</p>
+        <p>Best regards, <br>The Smart Purse Team</p>
+      `;
+
+      // Send Email to All Contributors
+      for (const email of contributorEmails) {
+        const mailOptions = {
+          from: process.env.EMAIL_USER,
+          to: email,
+          subject: `Daily Contribution Summary for ${kitty.kittyName}`,
+          html: emailBody,
+        };
+
+        transporter.sendMail(mailOptions, (error, info) => {
+          if (error) {
+            console.error(`Failed to send email to ${email}:`, error);
+          } else {
+            console.log(`Email sent to ${email}:`, info.response);
+          }
+        });
+      }
+    }
+  } catch (error) {
+    console.error("Error in scheduled contribution summary:", error);
+  }
 });
 
 // Start Server
