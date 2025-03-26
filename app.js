@@ -329,7 +329,7 @@ app.post("/mail", (req, res) => {
 });
 
 // Schedule Task to Run Every 24 Hours
-cron.schedule("*/10 * * * *", async () => {
+cron.schedule("0 0 * * *", async () => {
   console.log("Running scheduled contribution summary email task...");
 
   try {
